@@ -15,6 +15,8 @@
         mimeTypesAccepted: ['image/jpeg', 'image/png', 'image/gif', 'image/bmp'] // all mime types accepted
     };
 
+    var myWorker = new Worker("js/worker.js");
+
     // public method
     mosaicClient.setup = function(customConfig) {
    
@@ -102,15 +104,16 @@
 
     function loadImageIntoCanvas(image) {
 
-        var imagePieces = [],
-            numberOfColumns = Math.floor(image.width / config.tileWidth),
+        var numberOfColumns = Math.floor(image.width / config.tileWidth),
             numberOfRows = Math.floor(image.height / config.tileHeight),
             targetCanvas = document.getElementById('mosaic'),
-            averageColor,
+            tempCanvas = document.createElement('canvas'),
             context,
+            tempContext,
             colRange,
             rowRange,
-            processingRows = {};
+            processingRows = {},
+            canvasData;
 
         // setup the main canvas for displaying mosaic
         targetCanvas.width = image.width;
@@ -121,96 +124,111 @@
         colRange = Array.apply(null, {length: numberOfColumns}).map(Number.call, Number);
         rowRange = Array.apply(null, {length: numberOfRows}).map(Number.call, Number);
 
-        // create internal scope with forEach
-        rowRange.forEach(function(y) {
-            var promises = [];
-            processingRows[y] = true;
+        // load image onto temp canvas so we can get the data 
+        tempCanvas.width = image.width;
+        tempCanvas.width = image.height;
+        tempContext = tempCanvas.getContext('2d');
+        tempContext.drawImage(image, 0, 0, tempCanvas.width, tempCanvas.height);
+        canvasData = tempContext.getImageData(0, 0, targetCanvas.width, targetCanvas.height);
 
-            colRange.forEach(function(x) {
-                var img = new Image;
+        // first launch a web worker to figure out the color codes of each tile
+        // so we dont block main thread
+        // TODO: make it run in 4+ workers
 
-                promises.push(new Promise( function (resolve, reject) {
+        console.log('Image: ' + canvasData);
 
-                    img.onload = function() {
-                        resolve({
-                            image: img,
-                            xcoord: x,
-                            ycoord: y
-                        });
-                    };
+        myWorker.postMessage({
+            binaryImageData: canvasData, 
+            colRange: colRange, 
+            rowRange: rowRange
+        });
 
-                    // calculate the average color
-                    img.src = config.apiUrl + '/color/' + getAverageHexColor(image, x, y);
-                }));
-            });
-
-            // in order to print one row at a time
-            Promise.all(promises)
-                .then(function(resolvedList) {
-                    resolvedList.forEach(function(data) {
-                        context.drawImage(data.image, 0, 0, config.tileWidth, config.tileHeight, 
-                            data.xcoord * config.tileWidth, data.ycoord * config.tileHeight, config.tileWidth, config.tileHeight); 
-                        delete processingRows[data.ycoord];
-                    });
-
-                    if(Object.keys(processingRows).length === 0)
-                        toggleLoading(false);    
-                });
-        });    
-
-    }
-
-    function rgbToHex(r, g, b) {
-        return ((1 << 24) + (r << 16) + (g << 8) + b).toString(16).slice(1);
-    }
-
-    function getAverageHexColor(image, x, y) {
-
-        var blockSize = 5, // only visit every 5 pixels
-            defaultRGB = {r:0,g:0,b:0},
-            canvas = document.createElement('canvas'),
-            tileContext = canvas.getContext && canvas.getContext('2d'),
-            data,
-            i = -4,
-            length,
-            rgb = {r:0,g:0,b:0},
-            count = 0;
-
-        // for non supporting browsers
-        if (!tileContext) {
-            return defaultRGB;
+        myWorker.onmessage = function(e) {
+            console.log('Message received from worker: ' + e.data);
         }
 
-        // we only want canvas for the tile
-        canvas.height = config.tileHeight;
-        canvas.width = config.tileWidth;
 
-        tileContext.drawImage(image, x * config.tileWidth, y * config.tileHeight, config.tileWidth, 
-            config.tileHeight, 0, 0, config.tileWidth, config.tileHeight);
+        // rowRange.forEach(function(y) {
+        //     var promises = [];
+        //     var processedCount = 0;
+        //     processingRows[y] = true;
 
-        try {
-            data = tileContext.getImageData(0, 0, config.tileWidth, config.tileHeight);
-        } catch(e) {
-            // security error (cross domain)
-            return defaultRGB;
-        }
 
-        length = data.data.length;
+        //     // first calculate the color codes with workers
+        //     colRange.forEach(function(x) {       
 
-        while ( (i += blockSize * 4) < length ) {
-            ++count;
-            rgb.r += data.data[i];
-            rgb.g += data.data[i+1];
-            rgb.b += data.data[i+2];
-        }
+        //         var img = new Image;         
 
-        // floor values
-        rgb.r = Math.floor(rgb.r/count);
-        rgb.g = Math.floor(rgb.g/count);
-        rgb.b = Math.floor(rgb.b/count);
+        //         // calculate the average color with worker
+        //         myWorker.postMessage(getTileData(image, x, y));
 
-        // convert to hex
-        return rgbToHex(rgb.r, rgb.g, rgb.b);
+        //         myWorker.onmessage = function(e) {
+                    
+        //             console.log('Message received from worker: ' + e.data);
+
+        //             promises.push(new Promise( function (resolve, reject) {
+
+        //                 img.onload = function() {
+        //                     resolve({
+        //                         image: img,
+        //                         xcoord: x,
+        //                         ycoord: y
+        //                     });
+        //                 };
+
+        //                 img.src = config.apiUrl + '/color/' + e.data;                           
+        //             }));
+
+        //             // processedCount++;
+
+        //             // if(processedCount == colRange.length) {
+
+        //             // }
+        //         }                    
+        //     });            
+
+        //     // colRange.forEach(function(x) {                
+
+        //     //     var img = new Image;
+
+        //     //     promises.push(new Promise( function (resolve, reject) {
+
+        //     //         myWorker.postMessage(getTileData(image, x, y));
+
+        //     //         img.onload = function() {
+        //     //             resolve({
+        //     //                 image: img,
+        //     //                 xcoord: x,
+        //     //                 ycoord: y
+        //     //             });
+        //     //         };
+
+        //     //         myWorker.onmessage = function(e) {
+
+        //     //             // calculate the average color
+        //     //             img.src = config.apiUrl + '/color/' + e.data;
+        //     //             console.log('Image Src: ' + img.src);
+        //     //             console.log('Message received from worker: ' + e.data);
+        //     //         }
+                    
+        //     //     }));
+        //     // });
+
+        //     // in order to print one row at a time
+        //     Promise.all(promises)
+        //         .then(function(resolvedList) {
+        //             resolvedList.forEach(function(data) {
+        //                 console.log('Drawing..');
+        //                 context.drawImage(data.image, 0, 0, config.tileWidth, config.tileHeight, 
+        //                     data.xcoord * config.tileWidth, data.ycoord * config.tileHeight, config.tileWidth, config.tileHeight); 
+        //                 delete processingRows[data.ycoord];
+        //             });
+
+        //             if(Object.keys(processingRows).length === 0)
+        //                 toggleLoading(false);    
+        //         });
+        // });    
+
     }
 
 
