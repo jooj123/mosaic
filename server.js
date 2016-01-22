@@ -18,7 +18,7 @@ var mimeTypes = {
 };
 var cache = {};
 
-http.createServer(function (req, res) { 
+http.createServer(function (req, res) {
   var pathname = url.parse(req.url).pathname;
   var m;
   if (pathname == '/') {
