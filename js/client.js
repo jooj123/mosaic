@@ -110,63 +110,61 @@
         targetCanvas.height = image.height;
         context = targetCanvas.getContext('2d');
 
-        displayRowsFromTopToBottom(numberOfColumns, numberOfRows, 0, image, context);
+        toggleLoading(true);
+        displayRowsFromTopToBottom(numberOfColumns, numberOfRows, 0, image, context, processingRows);
     }
 
-    function displayRowsFromTopToBottom(numberOfColumns, numberOfRows, y, image, context) {
+    function displayRowsFromTopToBottom(numberOfColumns, numberOfRows, y, image, context, processingRows) {
 
         if (y == numberOfRows) {
+            toggleLoading(false);
             return;
-        } else {
-            var colRange = Array.apply(null, { length: numberOfColumns }).map(Number.call, Number);
-            var dotData = [];
+        }
 
-            // get the image data for each dot in row
+        var colRange = Array.apply(null, { length: numberOfColumns }).map(Number.call, Number);
+        var dotData = [];
+
+        // get the image data for each dot in row
+        colRange.forEach(function(x) {
+            dotData.push(getImageDataForWorker(image, x, y));
+        });
+
+        var worker = new Worker('js/worker.js');
+        worker.onmessage = function(e) {
+            var promises = [];
+
             colRange.forEach(function(x) {
-                dotData.push(getImageDataForWorker(image, x, y));
+                var img = new Image;
+
+                promises.push(new Promise(function (resolve, reject) {
+                    img.onload = function() {
+                        resolve({
+                            image: img,
+                            xcoord: x,
+                            ycoord: y
+                        });
+                    };
+
+                    img.src = config.apiUrl + '/color/' + e.data[x];
+                }));
             });
 
-            var worker = new Worker('js/worker.js');
-            worker.onmessage = function(e) {
-                var promises = [];
-
-                colRange.forEach(function(x) {
-                    var img = new Image;
-
-                    promises.push(new Promise(function (resolve, reject) {
-                        img.onload = function() {
-                            resolve({
-                                image: img,
-                                xcoord: x,
-                                ycoord: y
-                            });
-                        };
-
-                        img.src = config.apiUrl + '/color/' + e.data[x];
-                    }));
-                });
-
-                // in order to print one row at a time
-                Promise.all(promises)
-                    .then(function(resolvedList) {
-                        resolvedList.forEach(function(data) {
-                            context.drawImage(data.image, 0, 0, config.tileWidth, config.tileHeight,
-                                data.xcoord * config.tileWidth, data.ycoord * config.tileHeight, config.tileWidth, config.tileHeight);
-                            //delete processingRows[data.ycoord];
-                        });
-
-                        // if(Object.keys(processingRows).length === 0) {
-                        //     toggleLoading(false);
-                        // } else {
-                            displayRowsFromTopToBottom(numberOfColumns, numberOfRows, ++y, image, context);
-                        //}
+            // in order to print one row at a time
+            Promise.all(promises)
+                .then(function(resolvedList) {
+                    resolvedList.forEach(function(data) {
+                        context.drawImage(data.image, 0, 0, config.tileWidth, config.tileHeight,
+                            data.xcoord * config.tileWidth, data.ycoord * config.tileHeight, config.tileWidth, config.tileHeight);
+                        delete processingRows[data.ycoord];
                     });
 
-                worker.terminate();
-            };
+                    displayRowsFromTopToBottom(numberOfColumns, numberOfRows, ++y, image, context, processingRows);
+                });
 
-            worker.postMessage(dotData);
-        }
+            worker.terminate();
+        };
+
+        worker.postMessage(dotData);
     }
 
     function getImageDataForWorker(image, x, y) {
