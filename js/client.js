@@ -158,6 +158,7 @@
                         delete processingRows[data.ycoord];
                     });
 
+                    // use recursion to goto the next row
                     displayRowsFromTopToBottom(numberOfColumns, numberOfRows, ++y, image, context, processingRows);
                 });
 
@@ -169,15 +170,13 @@
 
     function getImageDataForWorker(image, x, y) {
 
-        var defaultRGB = { r:0,g:0,b:0 },
-            canvas = document.createElement('canvas'),
+        var canvas = document.createElement('canvas'),
             tileContext = canvas.getContext && canvas.getContext('2d'),
             data;
 
         // for non supporting browsers
-        // should throw error here
         if (!tileContext) {
-            return defaultRGB;
+            throw new Error('Unsupported browser');
         }
 
         // we only want canvas for the tile
@@ -191,7 +190,7 @@
             data = tileContext.getImageData(0, 0, config.tileWidth, config.tileHeight);
         } catch(e) {
             // security error (cross domain)
-            return defaultRGB;
+            throw new Error('Unsupported browser');
         }
 
         return data.data;
