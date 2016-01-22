@@ -26,4 +26,3 @@ Please feel free to submit a Pull Request, I would love for you to contribute to
 
 ## TODO
 1. Tests need to be implemented
-2. Use multiple workers (instead of just 1) to process the average image
