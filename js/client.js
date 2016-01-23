@@ -102,8 +102,7 @@
         var numberOfColumns = Math.floor(image.width / config.tileWidth),
             numberOfRows = Math.floor(image.height / config.tileHeight),
             targetCanvas = document.getElementById('mosaic'),
-            context,
-            processingRows = {};
+            context;
 
         // setup the main canvas for displaying mosaic
         targetCanvas.width = image.width;
@@ -111,10 +110,10 @@
         context = targetCanvas.getContext('2d');
 
         toggleLoading(true);
-        displayRowsFromTopToBottom(numberOfColumns, numberOfRows, 0, image, context, processingRows);
+        displayRowsFromTopToBottom(numberOfColumns, numberOfRows, 0, image, context);
     }
 
-    function displayRowsFromTopToBottom(numberOfColumns, numberOfRows, y, image, context, processingRows) {
+    function displayRowsFromTopToBottom(numberOfColumns, numberOfRows, y, image, context) {
 
         if (y == numberOfRows) {
             toggleLoading(false);
@@ -155,11 +154,10 @@
                     resolvedList.forEach(function(data) {
                         context.drawImage(data.image, 0, 0, config.tileWidth, config.tileHeight,
                             data.xcoord * config.tileWidth, data.ycoord * config.tileHeight, config.tileWidth, config.tileHeight);
-                        delete processingRows[data.ycoord];
                     });
 
                     // use recursion to goto the next row
-                    displayRowsFromTopToBottom(numberOfColumns, numberOfRows, ++y, image, context, processingRows);
+                    displayRowsFromTopToBottom(numberOfColumns, numberOfRows, ++y, image, context);
                 });
 
             worker.terminate();
